@@ -82,17 +82,23 @@ def listVMs(args):
 def listBackups(args):
     vms = getVMs(args)
     
-    if not args.vmHostnames: # List backups for all vms if no hosts are specified
-        args.vmHostnames = [vm["hostname"] for vm in vms]
+    # List backups for all vms if no hosts are specified
+    if not args.vmHostnames:
+        hostnames = None
+    else:
+        hostnames = set(args.vmHostnames)
     
     totalSize = 0
-    for vmHostname in args.vmHostnames:
-        vmID = getVMID(vms, vmHostname)
-        backups = getVMBackups(args.url, vmID, lambda backup: True)
-        totalSize += sum(backup["backup_size"] for backup in backups)
-        backupInfos = [getBackupInfo(backup) for backup in backups]
-        print "\nBackups for {}:\n".format(vmHostname)
-        print tabulate(backupInfos, headers=["Created at", "Built", "Built at", "Size", "Note"])
+    for vm in vms:
+        vmHostname = vm["hostname"]
+        vmID = vm["id"]
+        if hostnames == None or (vmHostname in hostnames):
+            if hostnames: hostnames.remove(vmHostname)
+            backups = getVMBackups(args.url, vmID, lambda backup: True)
+            totalSize += sum(backup["backup_size"] for backup in backups)
+            backupInfos = [getBackupInfo(backup) for backup in backups]
+            print "\nBackups for {} ({}):\n".format(vmHostname, getVMIPsString(vm))
+            print tabulate(backupInfos, headers=["Created at", "Built", "Built at", "Size", "Note"])
     
     print "\nTotal space taken by above backups: {} MB".format(totalSize / 1024)
 
@@ -168,6 +174,10 @@ def getVMPrimaryDiskID(baseUrl, vmId):
         return next(disk["id"] for disk in disks if disk["primary"])
     except StopIteration:
         raise ValueError("No primary disk found for VM ID {}".format(vmId))
+
+def getVMIPsString(vm):
+    ips = (ip["ip_address"]["address"] for ip in vm["ip_addresses"])
+    return ", ".join(ips)
 
 def getBackupInfo(backup):
     return [utcDateToLocal(backup["created_at"]), str(backup["built"]), 
