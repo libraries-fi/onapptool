@@ -10,6 +10,7 @@ import json
 import urllib2
 import dateutil.parser
 import time
+import ConfigParser
 from tabulate import tabulate
 from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
@@ -22,15 +23,33 @@ __updated__ = '2015-02-16'
 
 DEBUG = True
 
-class CLIError(Exception):
+class Error(Exception):
     '''Generic exception to raise and log different fatal errors.'''
     def __init__(self, msg):
-        super(CLIError).__init__(type(self))
-        self.msg = "E: %s" % msg
+        super(Error).__init__(type(self))
+        self.msg = msg
     def __str__(self):
         return self.msg
     def __unicode__(self):
         return self.msg
+    
+class Config:
+    def __init__(self):
+        # Load config
+        self.config = ConfigParser.ConfigParser(allow_no_value=True)
+        try:
+            self.config.readfp(open('config.ini'))
+        except:
+            self.config = None
+    
+    def get(self, section, option):
+        if not self.config: return None;
+        if not self.config.has_section(section): return None;
+        if not self.config.has_option(section, option): return None;
+        return self.config.get(section, option);
+    
+    def general(self, option):
+        return self.get("general", option);
 
 def installBasicAuth(baseUrl, user, passwd):
     password_mgr = urllib2.HTTPPasswordMgrWithDefaultRealm()
@@ -178,31 +197,35 @@ def main(argv=None): # IGNORE:C0111
     program_shortdesc = __import__('__main__').__doc__.split("\n")[1]
 
     try:
+        # Load config
+        config = Config()
+        
         # Setup argument parser
         parser = ArgumentParser(description=program_shortdesc, formatter_class=RawDescriptionHelpFormatter)
-        parser.add_argument("-u", dest="user", help="user for authentication")
-        parser.add_argument("-p", dest="passwd", help="password for authentication")
+        parser.add_argument("-t", dest="url", help="URL of the target host", default=config.general("url"))
+        parser.add_argument("-u", dest="user", help="user for authentication", default=config.general("user"))
+        parser.add_argument("-p", dest="passwd", help="password for authentication", default=config.general("pass"))
         
         actionParsers = parser.add_subparsers(help="what to do")
         
         vmParser = actionParsers.add_parser("vms", help="list available virtual machines")
-        addTargetHostParserArg(vmParser)
         vmParser.set_defaults(func=listVMs)
         
         backupsParser = actionParsers.add_parser("backups", help="list backups on all or specified vms")
-        addTargetHostParserArg(backupsParser)
         backupsParser.add_argument(dest="vmHostnames", nargs="*")
         backupsParser.set_defaults(func=listBackups)
         
         dobackupParser = actionParsers.add_parser("dobackup", help="start backups on specified vms, and poll their completion status every minute")
-        addTargetHostParserArg(dobackupParser)
         dobackupParser.add_argument(dest="vmHostnames", nargs="+")
         dobackupParser.add_argument("-n", dest="note", help="note to be attached to the backups")
         dobackupParser.set_defaults(func=doBackup)
 
         # Process arguments
         args = parser.parse_args()
-        installBasicAuth(args.url, args.user, args.passwd)
+        if args.user and args.passwd:
+            installBasicAuth(args.url, args.user, args.passwd)
+        if not args.url:
+            raise Error("URL of the target host is not defined")
         args.func(args)
     
     except KeyboardInterrupt:
@@ -210,10 +233,11 @@ def main(argv=None): # IGNORE:C0111
         return 0
     except Exception, e:
         if DEBUG:
-            raise(e)
-        indent = len(program_name) * " "
-        sys.stderr.write(program_name + ": " + repr(e) + "\n")
-        sys.stderr.write(indent + "  for help use --help")
+            raise
+        prefix = "error"
+        indent = len(prefix) * " "
+        sys.stderr.write(prefix + ": " + str(e) + "\n")
+        sys.stderr.write(indent + "  for help use --help\n")
         return 2
 
 def addTargetHostParserArg(parser):
