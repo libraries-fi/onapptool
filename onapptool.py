@@ -74,10 +74,26 @@ def postJson(url, requestDom):
     responseDom = json.loads(responseBody)
     return responseDom
 
+class RequestWithMethod(urllib2.Request):
+  def __init__(self, method, *args, **kwargs):
+    self._method = method
+    urllib2.Request.__init__(self, *args, **kwargs)
+
+  def get_method(self):
+    return self._method
+
+def delete(url):
+    request = RequestWithMethod("DELETE", url)
+    response = urllib2.urlopen(request)
+    return response
+
 def listVMs(args):
     vms = getVMs(args)
     vmInfos = [getVMInfo(vm) for vm in vms]
     print tabulate(vmInfos, headers=["Hostname", "ID", "RAM", "Booted", "Note"])
+
+def printBackupInfos(backupInfos):
+    print tabulate(backupInfos, headers=["ID", "Created at", "Built", "Built at", "Size", "Note"])
 
 def listBackups(args):
     vms = getVMs(args)
@@ -99,14 +115,45 @@ def listBackups(args):
             backupInfos = [getBackupInfo(backup) for backup in backups]
             print "\nBackups for {} ({}):\n".format(vmHostname, getVMIPsString(vm))
             if backupInfos:
-                print tabulate(backupInfos, headers=["ID", "Created at", "Built", "Built at", "Size", "Note"])
+                printBackupInfos(backupInfos)
             else:
                 print "  <No backups>"
     
     print "\nTotal space taken by above backups: {} MB".format(totalSize / 1024)
 
 def deleteBackups(args):
-    pass
+    print "Fetching list of backups..."
+    
+    vms = getVMs(args)
+    backupIDs = [int(id) for id in args.backupIDs]
+    foundBackupIDs = []
+
+    for vm in vms:
+        vmHostname = vm["hostname"]
+        vmID = vm["id"]
+        backups = getVMBackups(args.url, vmID, lambda backup: backup["id"] in backupIDs)
+        backupInfos = [getBackupInfo(backup) for backup in backups]
+        for backup in backups: foundBackupIDs.append(backup["id"])
+        if backupInfos:
+            print "\nIn {} ({}):\n".format(vmHostname, getVMIPsString(vm))
+            printBackupInfos(backupInfos)
+    
+    for id in backupIDs:
+        if id not in foundBackupIDs:
+            print "\nBackup ID {0} not found. Aborting.".format(id)
+            return
+        
+    print "\nDelete the above backups (y/n)?",
+    if not prompt(): return
+    
+    for id in backupIDs:
+        print "Deleting {0}...".format(id),
+        deleteBackup(args.url, id)
+        print "done"
+
+def prompt():
+    choice = raw_input().lower()
+    return choice == "y"
 
 def doBackup(args):
     vms = getVMs(args)
@@ -149,7 +196,16 @@ def isBackupBuilt(baseUrl, vmID, vmHostname, backupID):
     if built:
         printWithTime("Backup (id={}) on {} finished!".format(backupID, vmHostname))
     return built
+
+def getBackup(baseUrl, id):
+    url = "{0}/backups/{1}.json".format(baseUrl, id)
+    dom = getJson(url)
+    return dom["backup"]
     
+def deleteBackup(baseUrl, id):
+    url = "{0}/backups/{1}.json".format(baseUrl, id)
+    delete(url)
+
 def getVMInfo(vm):
     return [vm["hostname"], vm["id"], vm["memory"], str(vm["booted"]), vm["note"]]
 
@@ -235,6 +291,10 @@ def main(argv=None): # IGNORE:C0111
         dobackupParser.add_argument(dest="vmHostnames", nargs="+")
         dobackupParser.add_argument("-n", dest="note", help="note to be attached to the backups")
         dobackupParser.set_defaults(func=doBackup)
+        
+        backupsParser = actionParsers.add_parser("delete", help="delete backups with given IDs")
+        backupsParser.add_argument(dest="backupIDs", nargs="*")
+        backupsParser.set_defaults(func=deleteBackups)
 
         # Process arguments
         args = parser.parse_args()
