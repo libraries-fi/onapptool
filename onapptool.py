@@ -98,9 +98,15 @@ def listBackups(args):
             totalSize += sum(backup["backup_size"] for backup in backups)
             backupInfos = [getBackupInfo(i, backup) for i, backup in enumerate(backups)]
             print "\nBackups for {} ({}):\n".format(vmHostname, getVMIPsString(vm))
-            print tabulate(backupInfos, headers=["N", "Created at", "Built", "Built at", "Size", "Note"])
+            if backupInfos:
+                print tabulate(backupInfos, headers=["N", "Created at", "Built", "Built at", "Size", "Note"])
+            else:
+                print "  <No backups>"
     
     print "\nTotal space taken by above backups: {} MB".format(totalSize / 1024)
+
+def deleteBackups(args):
+    pass
 
 def doBackup(args):
     vms = getVMs(args)
