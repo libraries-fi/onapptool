@@ -96,10 +96,10 @@ def listBackups(args):
             if hostnames: hostnames.remove(vmHostname)
             backups = getVMBackups(args.url, vmID, lambda backup: True)
             totalSize += sum(backup["backup_size"] for backup in backups)
-            backupInfos = [getBackupInfo(i, backup) for i, backup in enumerate(backups)]
+            backupInfos = [getBackupInfo(backup) for backup in backups]
             print "\nBackups for {} ({}):\n".format(vmHostname, getVMIPsString(vm))
             if backupInfos:
-                print tabulate(backupInfos, headers=["N", "Created at", "Built", "Built at", "Size", "Note"])
+                print tabulate(backupInfos, headers=["ID", "Created at", "Built", "Built at", "Size", "Note"])
             else:
                 print "  <No backups>"
     
@@ -185,8 +185,8 @@ def getVMIPsString(vm):
     ips = (ip["ip_address"]["address"] for ip in vm["ip_addresses"])
     return ", ".join(ips)
 
-def getBackupInfo(index, backup):
-    return [index, utcDateToLocal(backup["created_at"]), str(backup["built"]), 
+def getBackupInfo(backup):
+    return [backup["id"], utcDateToLocal(backup["created_at"]), str(backup["built"]), 
             utcDateToLocal(backup["built_at"]), backup["backup_size"] / 1024, backup["note"]]
 
 def utcDateToLocal(utcDate):
