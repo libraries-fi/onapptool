@@ -159,7 +159,7 @@ def doBackup(args):
     vms = getVMs(args)
     isBuiltTests = []
     if not args.note: args.note = "onapptool backup"
-    note = args.note + " " + dateToString(datetime.now())
+    note = args.note
     
     printWithTime("Starting backups on {} VMs".format(len(args.vmHostnames)))
     
